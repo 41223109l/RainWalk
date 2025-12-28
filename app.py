@@ -19,7 +19,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ==========================================
 # 0. 系統設定
 # ==========================================
-st.set_page_config(page_title="RainWalk Pro", page_icon="☔", layout="wide")
+st.set_page_config(page_title="RainWalk", page_icon="☔", layout="wide")
 
 try:
     CWA_API_KEY = st.secrets["CWA_API_KEY"]
@@ -169,7 +169,7 @@ def load_road_network_optimized(_gdf_arcade):
 # 2. 介面與邏輯
 # ==========================================
 
-st.title("☔ RainWalk Pro: Smart Shelter Navigation")
+st.title("☔ RainWalk: Smart Shelter Navigation")
 
 df_raingo, gdf_arcade = load_map_data()
 
@@ -349,3 +349,4 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
         st.error(f"Destination Search Failed: {e}")
 
 st_folium(m, width=800, height=600)
+
