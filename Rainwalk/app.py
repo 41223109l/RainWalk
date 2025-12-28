@@ -11,6 +11,7 @@ import osmnx as ox
 import networkx as nx
 from streamlit_js_eval import get_geolocation
 import urllib3
+import os
 
 # 關閉不安全的連線警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -88,38 +89,42 @@ def get_weather_data(user_lat, user_lon):
 
 @st.cache_data
 def load_map_data():
-    # 1. 讀取 CSV (已改名為 raingo.csv)
-    try: 
-        raingo = pd.read_csv('raingo.csv')
-    except: 
-        # 萬一你還沒改名，嘗試讀舊檔名作為備案
-        try:
-            raingo = pd.read_csv('raingo共享傘租借站-大安區-20250613.csv')
-        except:
-            raingo = pd.DataFrame()
+    # --- 偵探模式：檢查檔案到底在不在 ---
+    st.sidebar.write("📂 雲端主機上的檔案列表：")
+    files = os.listdir('.')
+    st.sidebar.code(files) # 這會把所有檔案列出來
     
-    # 2. 讀取 騎樓 Shapefile (自動嘗試 big5 和 utf-8)
+    # 1. 讀取 RainGo CSV
+    raingo = pd.DataFrame()
+    try:
+        # 嘗試讀取
+        raingo = pd.read_csv('raingo.csv')
+        st.sidebar.success(f"✅ RainGo 讀取成功！共 {len(raingo)} 筆")
+    except Exception as e:
+        # 顯示詳細錯誤
+        st.sidebar.error(f"❌ RainGo 失敗原因: {e}")
+
+    # 2. 讀取 騎樓 Shapefile
     arcade = gpd.GeoDataFrame()
     try:
-        # 先試試 big5
-        arcade = gpd.read_file('Finishgfl97.shp', encoding='big5')
+        # 嘗試讀取
+        st.sidebar.info("正在嘗試讀取 Shapefile...")
+        arcade = gpd.read_file('Finishgfl97.shp')
+        
+        # 座標轉換
         if arcade.crs is None: arcade.set_crs(epsg=3826, inplace=True)
         arcade = arcade.to_crs(epsg=4326)
         
-        # 檢查是否有資料
+        # 篩選大安區
         check = arcade[arcade['GFL_ZONE'] == '大安區']
-        
-        # 如果 big5 讀出來是空的，很可能是編碼錯了，改用 utf-8 再試一次
-        if check.empty:
-            arcade = gpd.read_file('Finishgfl97.shp', encoding='utf-8') # 重讀
-            if arcade.crs is None: arcade.set_crs(epsg=3826, inplace=True)
-            arcade = arcade.to_crs(epsg=4326)
-            check = arcade[arcade['GFL_ZONE'] == '大安區']
-            
-        if not check.empty: 
+        if not check.empty:
             arcade = check
+            st.sidebar.success(f"✅ 騎樓讀取成功！共 {len(arcade)} 筆")
+        else:
+            st.sidebar.warning("⚠️ Shapefile 讀到了，但篩選『大安區』後是空的 (可能是編碼問題)")
             
-    except: pass
+    except Exception as e:
+        st.sidebar.error(f"❌ Shapefile 失敗原因: {e}")
     
     return raingo, arcade
 
@@ -348,3 +353,4 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
         st.error(f"Destination Search Failed: {e}")
 
 st_folium(m, width=800, height=600)
+
