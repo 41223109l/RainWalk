@@ -13,7 +13,12 @@ from streamlit_js_eval import get_geolocation
 # ==========================================
 # 0. System Configuration
 # ==========================================
-CWA_API_KEY = "YOUR_API_KEY_HERE" 
+# 嘗試從 Secrets (保險箱) 拿鑰匙，如果失敗就用備用的
+try:
+    CWA_API_KEY = st.secrets["CWA_API_KEY"]
+except:
+    
+    CWA_API_KEY = "CWA-42942699-8B8B-4B7B-8800-110D1D769E6D"
 API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001"
 
 st.set_page_config(page_title="RainWalk", page_icon="☔", layout="wide")
