@@ -4,23 +4,25 @@ import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
-# 修改 1: 改用 ArcGIS，它比 Nominatim 穩定非常多，不會擋雲端 IP
+# 使用 ArcGIS 避免被封鎖 IP
 from geopy.geocoders import ArcGIS 
 import requests
 import osmnx as ox
 import networkx as nx
 from streamlit_js_eval import get_geolocation
+import urllib3
+
+# 關閉不安全的連線警告 (讓版面乾淨一點)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ==========================================
-# 0. 系統設定與 API Key (雙重保險)
+# 0. 系統設定與 API Key
 # ==========================================
 st.set_page_config(page_title="RainWalk Pro", page_icon="☔", layout="wide")
 
-# 這裡會自動判斷：如果有設定 Secrets 就用 Secrets，沒有就用下面這把備用鑰匙
 try:
     CWA_API_KEY = st.secrets["CWA_API_KEY"]
 except:
-    # 如果你沒有在 Streamlit 後台設定，就會用到這一行
     CWA_API_KEY = "CWA-42942699-8B8B-4B7B-8800-110D1D769E6D"
 
 API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001"
@@ -31,15 +33,14 @@ API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001"
 
 @st.cache_data(ttl=600)
 def get_weather_data(user_lat, user_lon):
-    # 除錯區塊：如果 API Key 還是抓不到，這裡會直接顯示
     if "CWA-" not in CWA_API_KEY:
         return None, "API Key Error"
 
     params = {"Authorization": CWA_API_KEY, "format": "JSON", "StationStatus": "OPEN"}
     try:
-        response = requests.get(API_URL, params=params, timeout=10) # 加入 timeout 避免卡死
+        # 【關鍵修改】加入 verify=False，略過 SSL 憑證檢查
+        response = requests.get(API_URL, params=params, timeout=10, verify=False)
         
-        # 檢查 API 回傳狀態
         if response.status_code != 200:
             return None, f"API Error: {response.status_code}"
             
@@ -51,12 +52,10 @@ def get_weather_data(user_lat, user_lon):
         min_dist = float('inf')
         nearest_station = None
 
-        # 尋找最近測站
         for s in stations:
             try:
                 lat = float(s['GeoInfo']['Coordinates'][1]['StationLatitude'])
                 lon = float(s['GeoInfo']['Coordinates'][1]['StationLongitude'])
-                # 簡單距離計算
                 dist = (lat - user_lat)**2 + (lon - user_lon)**2
                 if dist < min_dist:
                     min_dist = dist
@@ -66,18 +65,15 @@ def get_weather_data(user_lat, user_lon):
         if nearest_station:
             w_elem = nearest_station.get('WeatherElement', {})
             rain = 0.0
-            
-            # 嘗試抓取各種可能的雨量欄位
             if 'Precipitation' in w_elem: 
                 rain = float(w_elem['Precipitation'])
             elif 'Now' in w_elem and 'Precipitation' in w_elem['Now']: 
                 rain = float(w_elem['Now']['Precipitation'])
             
-            if rain < 0: rain = 0.0 # 排除異常值
+            if rain < 0: rain = 0.0
             
             desc = w_elem.get('Weather', 'Observing')
             
-            # 簡易中翻英
             desc_en = desc
             if "雷" in desc: desc_en = "Thunderstorm"
             elif "雨" in desc: desc_en = "Rainy"
@@ -87,26 +83,39 @@ def get_weather_data(user_lat, user_lon):
             return {"station": nearest_station.get('StationName'), "rain": rain, "desc": desc, "desc_en": desc_en}, None
             
     except Exception as e: 
-        # 這是最重要的除錯訊息，會顯示在側邊欄
         return None, f"Connect Error: {str(e)}"
         
     return None, "No Data Found"
 
 @st.cache_data
 def load_map_data():
-    try: raingo = pd.read_csv('raingo共享傘租借站-大安區-20250613.csv')
-    except: raingo = pd.DataFrame()
+    # 1. 讀取 RainGo CSV
+    try: 
+        raingo = pd.read_csv('raingo共享傘租借站-大安區-20250613.csv')
+        st.sidebar.success("✅ RainGo CSV 讀取成功！")
+    except Exception as e:
+        st.sidebar.error(f"❌ RainGo 讀取失敗: {e}")
+        raingo = pd.DataFrame()
     
+    # 2. 讀取 騎樓 Shapefile
     arcade = gpd.GeoDataFrame()
     try:
+        # 注意：Shapefile 需要 .shp, .shx, .dbf 三個檔案都在同一個地方才讀得到
         arcade = gpd.read_file('Finishgfl97.shp', encoding='big5')
-        if arcade.crs is None: arcade.set_crs(epsg=3826, inplace=True)
+        
+        if arcade.crs is None: 
+            arcade.set_crs(epsg=3826, inplace=True)
         arcade = arcade.to_crs(epsg=4326)
+        
         check = arcade[arcade['GFL_ZONE'] == '大安區']
-        if not check.empty: arcade = check
-    except: pass
+        if not check.empty: 
+            arcade = check
+        st.sidebar.success("✅ 騎樓圖層 讀取成功！")
+            
+    except Exception as e:
+        st.sidebar.error(f"❌ 騎樓圖層讀取失敗: {e}")
+    
     return raingo, arcade
-
 @st.cache_resource
 def load_road_network_optimized(_gdf_arcade): 
     with st.spinner('Analyzing road network data (GIS processing)...'):
@@ -181,14 +190,12 @@ if use_gps:
             st.session_state.lon = new_lon
             st.rerun()
 
-# Address Input (修改處 1)
+# Address Input
 if not use_gps:
     start_address = st.sidebar.text_input("Enter Departure Address (e.g., NTNU Library)", "")
     if st.sidebar.button("🔍 Search Coordinates"):
-        # 改用 ArcGIS，解決 403 Forbidden 問題
         geolocator = ArcGIS(timeout=10) 
         try:
-            # 自動加上 "Taiwan" 確保搜尋範圍正確
             query = f"{start_address} Taiwan"
             location = geolocator.geocode(query)
             if location:
@@ -210,7 +217,7 @@ start_loc = [final_lat, final_lon]
 st.sidebar.caption(f"Current Coords: {final_lat:.5f}, {final_lon:.5f}")
 
 
-# --- Weather Visualization (修改處 2) ---
+# --- Weather Visualization ---
 st.sidebar.header("🌦️ Current Weather")
 weather_info, w_err = get_weather_data(final_lat, final_lon)
 
@@ -246,7 +253,6 @@ if weather_info:
         st.metric(label="Rainfall (mm)", value=f"{rain_val}")
         st.caption(f"Condition: {desc_en}")
 else:
-    # 這裡會顯示具體的錯誤原因，讓你（或我）知道為什麼抓不到天氣
     st.sidebar.warning(f"Weather Status: {w_err}")
 
 # --- Navigation & Layers ---
@@ -300,10 +306,8 @@ if mode == "🚶 No Umbrella (Find nearest Raingo)" and not df_raingo.empty:
             folium.PolyLine([start_loc, dest_coords], color="green").add_to(m)
 
 elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
-    # (修改處 3) 同樣改用 ArcGIS，解決 403 問題
     geolocator = ArcGIS(timeout=10)
     try:
-        # 自動加上 "Taiwan"
         query = f"{dest_input} Taiwan"
         loc = geolocator.geocode(query)
         if loc:
