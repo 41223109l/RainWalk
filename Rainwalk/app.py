@@ -179,7 +179,8 @@ if use_gps:
 if not use_gps:
     start_address = st.sidebar.text_input("Enter Departure Address (e.g., 師大圖書館)", "")
     if st.sidebar.button("🔍 Search Coordinates"):
-        geolocator = Nominatim(user_agent="rainwalk_start_point")
+        # 設定 timeout=10，表示願意等它 10 秒
+        geolocator = Nominatim(user_agent="rainwalk_start_point", timeout=10)
         try:
             # 加上 country_codes='tw' 限制在台灣
             location = geolocator.geocode(start_address, country_codes='tw')
@@ -297,7 +298,7 @@ if mode == "🚶 No Umbrella (Find nearest Raingo)" and not df_raingo.empty:
             folium.PolyLine([start_loc, dest_coords], color="green").add_to(m)
 
 elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
-    geolocator = Nominatim(user_agent="rainwalk_path_final")
+    geolocator = Nominatim(user_agent="rainwalk_path_final", timeout=10)
     try:
         # 限制目的地搜尋也在台灣
         loc = geolocator.geocode(dest_input, country_codes='tw')
@@ -328,3 +329,4 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
         st.error("Destination not found.")
 
 st_folium(m, width=800, height=600)
+
