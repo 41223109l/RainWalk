@@ -1,0 +1,10 @@
+streamlit
+pandas
+geopandas
+folium
+streamlit-folium
+geopy
+requests
+osmnx
+networkx
+streamlit-js-eval
