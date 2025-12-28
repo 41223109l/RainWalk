@@ -12,11 +12,11 @@ import networkx as nx
 from streamlit_js_eval import get_geolocation
 import urllib3
 
-# 關閉不安全的連線警告 (讓版面乾淨一點)
+# 關閉不安全的連線警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ==========================================
-# 0. 系統設定與 API Key
+# 0. 系統設定
 # ==========================================
 st.set_page_config(page_title="RainWalk Pro", page_icon="☔", layout="wide")
 
@@ -38,7 +38,7 @@ def get_weather_data(user_lat, user_lon):
 
     params = {"Authorization": CWA_API_KEY, "format": "JSON", "StationStatus": "OPEN"}
     try:
-        # 【關鍵修改】加入 verify=False，略過 SSL 憑證檢查
+        # verify=False 是解決黃色 SSLError 的關鍵
         response = requests.get(API_URL, params=params, timeout=10, verify=False)
         
         if response.status_code != 200:
@@ -69,11 +69,11 @@ def get_weather_data(user_lat, user_lon):
                 rain = float(w_elem['Precipitation'])
             elif 'Now' in w_elem and 'Precipitation' in w_elem['Now']: 
                 rain = float(w_elem['Now']['Precipitation'])
-            
             if rain < 0: rain = 0.0
             
             desc = w_elem.get('Weather', 'Observing')
             
+            # 簡易翻譯
             desc_en = desc
             if "雷" in desc: desc_en = "Thunderstorm"
             elif "雨" in desc: desc_en = "Rainy"
@@ -84,41 +84,49 @@ def get_weather_data(user_lat, user_lon):
             
     except Exception as e: 
         return None, f"Connect Error: {str(e)}"
-        
     return None, "No Data Found"
 
 @st.cache_data
 def load_map_data():
-    # 1. 讀取 RainGo CSV
+    # 1. 讀取 CSV (已改名為 raingo.csv)
     try: 
-        raingo = pd.read_csv('raingo共享傘租借站-大安區-20250613.csv')
-        st.sidebar.success("✅ RainGo CSV 讀取成功！")
-    except Exception as e:
-        st.sidebar.error(f"❌ RainGo 讀取失敗: {e}")
-        raingo = pd.DataFrame()
+        raingo = pd.read_csv('raingo.csv')
+    except: 
+        # 萬一你還沒改名，嘗試讀舊檔名作為備案
+        try:
+            raingo = pd.read_csv('raingo共享傘租借站-大安區-20250613.csv')
+        except:
+            raingo = pd.DataFrame()
     
-    # 2. 讀取 騎樓 Shapefile
+    # 2. 讀取 騎樓 Shapefile (自動嘗試 big5 和 utf-8)
     arcade = gpd.GeoDataFrame()
     try:
-        # 注意：Shapefile 需要 .shp, .shx, .dbf 三個檔案都在同一個地方才讀得到
+        # 先試試 big5
         arcade = gpd.read_file('Finishgfl97.shp', encoding='big5')
-        
-        if arcade.crs is None: 
-            arcade.set_crs(epsg=3826, inplace=True)
+        if arcade.crs is None: arcade.set_crs(epsg=3826, inplace=True)
         arcade = arcade.to_crs(epsg=4326)
         
+        # 檢查是否有資料
         check = arcade[arcade['GFL_ZONE'] == '大安區']
+        
+        # 如果 big5 讀出來是空的，很可能是編碼錯了，改用 utf-8 再試一次
+        if check.empty:
+            arcade = gpd.read_file('Finishgfl97.shp', encoding='utf-8') # 重讀
+            if arcade.crs is None: arcade.set_crs(epsg=3826, inplace=True)
+            arcade = arcade.to_crs(epsg=4326)
+            check = arcade[arcade['GFL_ZONE'] == '大安區']
+            
         if not check.empty: 
             arcade = check
-        st.sidebar.success("✅ 騎樓圖層 讀取成功！")
             
-    except Exception as e:
-        st.sidebar.error(f"❌ 騎樓圖層讀取失敗: {e}")
+    except: pass
     
     return raingo, arcade
+
 @st.cache_resource
 def load_road_network_optimized(_gdf_arcade): 
     with st.spinner('Analyzing road network data (GIS processing)...'):
+        # 下載路網
         G = ox.graph_from_place("Daan District, Taipei, Taiwan", network_type='walk')
         gdf_edges = ox.graph_to_gdfs(G, nodes=False, fill_edge_geometry=True)
         gdf_edges_proj = gdf_edges.to_crs(epsg=3826)
@@ -157,12 +165,18 @@ def load_road_network_optimized(_gdf_arcade):
         return G
 
 # ==========================================
-# 2. UI & Logic
+# 2. 介面與邏輯 (UI Logic)
 # ==========================================
 
 st.title("☔ RainWalk Pro: Smart Shelter Navigation")
 
 df_raingo, gdf_arcade = load_map_data()
+
+# 顯示載入狀況 (除錯用)
+if df_raingo.empty:
+    st.sidebar.warning("⚠️ Warning: RainGo data not loaded (Check CSV filename)")
+if gdf_arcade.empty:
+    st.sidebar.warning("⚠️ Warning: Arcade data not loaded (Check Shapefile)")
 
 try:
     G = load_road_network_optimized(gdf_arcade)
