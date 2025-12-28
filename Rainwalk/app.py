@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import os
 import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
@@ -11,7 +12,7 @@ import osmnx as ox
 import networkx as nx
 from streamlit_js_eval import get_geolocation
 import urllib3
-import os
+
 
 # 關閉不安全的連線警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -353,4 +354,5 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
         st.error(f"Destination Search Failed: {e}")
 
 st_folium(m, width=800, height=600)
+
 
