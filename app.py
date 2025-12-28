@@ -207,7 +207,7 @@ if use_gps:
 
 # Address Input
 if not use_gps:
-    start_address = st.sidebar.text_input("Enter Departure Address (e.g., NTNU Library)", "")
+    start_address = st.sidebar.text_input("Enter Departure Address (e.g., 捷運古亭站)", "")
     if st.sidebar.button("🔍 Search Coordinates"):
         geolocator = ArcGIS(timeout=10) 
         try:
@@ -349,4 +349,5 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
         st.error(f"Destination Search Failed: {e}")
 
 st_folium(m, width=800, height=600)
+
 
