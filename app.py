@@ -4,37 +4,50 @@ import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
-from geopy.geocoders import Nominatim
+# 使用 ArcGIS 避免被封鎖 IP
+from geopy.geocoders import ArcGIS 
 import requests
 import osmnx as ox
 import networkx as nx
 from streamlit_js_eval import get_geolocation
+import urllib3
+import os
+
+# 關閉不安全的連線警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ==========================================
-# 0. System Configuration
+# 0. 系統設定
 # ==========================================
-# 嘗試從 Secrets (保險箱) 拿鑰匙，如果失敗就用備用的
+st.set_page_config(page_title="RainWalk Pro", page_icon="☔", layout="wide")
+
 try:
     CWA_API_KEY = st.secrets["CWA_API_KEY"]
 except:
-    
     CWA_API_KEY = "CWA-42942699-8B8B-4B7B-8800-110D1D769E6D"
+
 API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001"
 
-st.set_page_config(page_title="RainWalk", page_icon="☔", layout="wide")
-
 # ==========================================
-# 1. Core Functions
+# 1. 核心功能函式
 # ==========================================
 
 @st.cache_data(ttl=600)
 def get_weather_data(user_lat, user_lon):
-    if not CWA_API_KEY: return None, "Missing API Key"
+    if "CWA-" not in CWA_API_KEY:
+        return None, "API Key Error"
+
     params = {"Authorization": CWA_API_KEY, "format": "JSON", "StationStatus": "OPEN"}
     try:
-        response = requests.get(API_URL, params=params)
+        # verify=False 解決 SSL 錯誤
+        response = requests.get(API_URL, params=params, timeout=10, verify=False)
+        
+        if response.status_code != 200:
+            return None, f"API Error: {response.status_code}"
+            
         data = response.json()
-        if "records" not in data: return None, "API Error"
+        if "records" not in data: 
+            return None, "Data Format Error"
         
         stations = data['records']['Station']
         min_dist = float('inf')
@@ -53,12 +66,15 @@ def get_weather_data(user_lat, user_lon):
         if nearest_station:
             w_elem = nearest_station.get('WeatherElement', {})
             rain = 0.0
-            if 'Precipitation' in w_elem: rain = float(w_elem['Precipitation'])
-            elif 'Now' in w_elem and 'Precipitation' in w_elem['Now']: rain = float(w_elem['Now']['Precipitation'])
+            if 'Precipitation' in w_elem: 
+                rain = float(w_elem['Precipitation'])
+            elif 'Now' in w_elem and 'Precipitation' in w_elem['Now']: 
+                rain = float(w_elem['Now']['Precipitation'])
             if rain < 0: rain = 0.0
+            
             desc = w_elem.get('Weather', 'Observing')
             
-            # Simple translation for display
+            # 簡易翻譯
             desc_en = desc
             if "雷" in desc: desc_en = "Thunderstorm"
             elif "雨" in desc: desc_en = "Rainy"
@@ -66,89 +82,103 @@ def get_weather_data(user_lat, user_lon):
             elif "陰" in desc or "雲" in desc: desc_en = "Cloudy"
             
             return {"station": nearest_station.get('StationName'), "rain": rain, "desc": desc, "desc_en": desc_en}, None
-    except Exception as e: return None, str(e)
-    return None, "No Data"
+            
+    except Exception as e: 
+        return None, f"Connect Error: {str(e)}"
+    return None, "No Data Found"
 
 @st.cache_data
 def load_map_data():
-    try: raingo = pd.read_csv('raingo共享傘租借站-大安區-20250613.csv')
-    except: raingo = pd.DataFrame()
+    # 1. 讀取 CSV (直接讀檔名，因為檔案就在旁邊)
+    raingo = pd.DataFrame()
+    try: 
+        raingo = pd.read_csv('raingo.csv')
+    except: 
+        try:
+            raingo = pd.read_csv('raingo共享傘租借站-大安區-20250613.csv')
+        except: pass
     
+    # 2. 讀取 騎樓 Shapefile
     arcade = gpd.GeoDataFrame()
     try:
-        arcade = gpd.read_file('Finishgfl97.shp', encoding='big5')
+        shp_path = 'Finishgfl97.shp'
+        
+        # 先試試 big5
+        arcade = gpd.read_file(shp_path, encoding='big5')
         if arcade.crs is None: arcade.set_crs(epsg=3826, inplace=True)
         arcade = arcade.to_crs(epsg=4326)
+        
         check = arcade[arcade['GFL_ZONE'] == '大安區']
-        if not check.empty: arcade = check
-    except: pass
+        
+        # 如果 big5 讀出來是空的，改用 utf-8
+        if check.empty:
+            arcade = gpd.read_file(shp_path, encoding='utf-8')
+            if arcade.crs is None: arcade.set_crs(epsg=3826, inplace=True)
+            arcade = arcade.to_crs(epsg=4326)
+            check = arcade[arcade['GFL_ZONE'] == '大安區']
+            
+        if not check.empty: 
+            arcade = check
+            
+    except Exception as e:
+        st.sidebar.error(f"Map Load Error: {e}")
+    
     return raingo, arcade
 
 @st.cache_resource
 def load_road_network_optimized(_gdf_arcade): 
-    """
-    Core Algorithm: Spatial Join + Keyword Whitelist + Soft Weights
-    """
     with st.spinner('Analyzing road network data (GIS processing)...'):
-        # 1. Download Network
         G = ox.graph_from_place("Daan District, Taipei, Taiwan", network_type='walk')
-        
-        # 2. Spatial Join
         gdf_edges = ox.graph_to_gdfs(G, nodes=False, fill_edge_geometry=True)
         gdf_edges_proj = gdf_edges.to_crs(epsg=3826)
         
         sheltered_indices = set()
         if not _gdf_arcade.empty:
             arcade_proj = _gdf_arcade.to_crs(epsg=3826)
-            # Buffer 25m
             arcade_proj['buffer'] = arcade_proj.geometry.buffer(25) 
             arcade_buffer = arcade_proj.set_geometry('buffer')
             sheltered_edges = gpd.sjoin(gdf_edges_proj, arcade_buffer, how='inner', predicate='intersects')
             sheltered_indices = set(sheltered_edges.index)
         
-        # 3. Whitelist (Chinese Road Names need to match OSM data)
         forced_arcades = ['和平東路', '信義路', '新生南路', '復興南路', '敦化南路', '羅斯福路', '仁愛路', '建國南路', '忠孝東路', '大安路', '金山南路']
 
         count = 0
         for u, v, k, data in G.edges(keys=True, data=True):
             length = data['length']
-            
-            # Get road name
             raw_name = data.get('name', '')
             name_str = "".join(raw_name) if isinstance(raw_name, list) else str(raw_name)
             
             is_sheltered = False
-            
-            # Check A: GIS
-            if (u, v, k) in sheltered_indices:
-                is_sheltered = True
-            
-            # Check B: Whitelist
+            if (u, v, k) in sheltered_indices: is_sheltered = True
             if not is_sheltered:
                 for key in forced_arcades:
                     if key in name_str:
                         is_sheltered = True
                         break
             
-            # --- Weight Setting ---
             if is_sheltered:
                 data['rain_cost'] = length * 1.0 
                 count += 1
             else:
-                data['rain_cost'] = length * 1.5 # Soft penalty
+                data['rain_cost'] = length * 1.5 
         
         print(f"Network analysis complete: Marked {count} sheltered edges.")
         return G
 
 # ==========================================
-# 2. UI & Logic
+# 2. 介面與邏輯
 # ==========================================
 
-st.title("☔ RainWalk: Smart Shelter Navigation")
+st.title("☔ RainWalk Pro: Smart Shelter Navigation")
 
 df_raingo, gdf_arcade = load_map_data()
 
-# Load Network
+# 恢復正常的錯誤顯示，如果真的沒讀到才跳出來
+if df_raingo.empty:
+    st.sidebar.warning("⚠️ RainGo data missing (Check CSV in root folder)")
+if gdf_arcade.empty:
+    st.sidebar.warning("⚠️ Arcade data missing (Check Shapefile in root folder)")
+
 try:
     G = load_road_network_optimized(gdf_arcade)
 except Exception as e:
@@ -163,7 +193,7 @@ default_lon = 121.5282
 if 'lat' not in st.session_state: st.session_state.lat = default_lat
 if 'lon' not in st.session_state: st.session_state.lon = default_lon
 
-# GPS Button
+# GPS
 use_gps = st.sidebar.checkbox("📡 Use GPS Positioning", value=False)
 if use_gps:
     loc = get_geolocation(component_key='get_loc')
@@ -175,28 +205,26 @@ if use_gps:
             st.session_state.lon = new_lon
             st.rerun()
 
-# 地址輸入
+# Address Input
 if not use_gps:
-    start_address = st.sidebar.text_input("Enter Departure Address (e.g., 師大圖書館)", "")
+    start_address = st.sidebar.text_input("Enter Departure Address (e.g., NTNU Library)", "")
     if st.sidebar.button("🔍 Search Coordinates"):
-        geolocator = Nominatim(user_agent="rainwalk_start_point")
+        geolocator = ArcGIS(timeout=10) 
         try:
-            # 加上 country_codes='tw' 限制在台灣
-            location = geolocator.geocode(start_address, country_codes='tw')
-            
+            query = f"{start_address} Taiwan"
+            location = geolocator.geocode(query)
             if location:
                 st.session_state.lat = location.latitude
                 st.session_state.lon = location.longitude
-                st.sidebar.success(f"Found: {start_address}")
+                st.sidebar.success(f"Found: {location.address}")
                 st.rerun()
             else:
-                st.sidebar.error("Address not found in Taiwan.")
+                st.sidebar.error("Address not found.")
         except Exception as e: 
             st.sidebar.error(f"Search failed: {e}")
 
 st.sidebar.markdown("---")
 
-# Get final coordinates from session state
 final_lat = st.session_state.lat
 final_lon = st.session_state.lon
 start_loc = [final_lat, final_lon]
@@ -210,14 +238,12 @@ weather_info, w_err = get_weather_data(final_lat, final_lon)
 
 if weather_info:
     rain_val = weather_info['rain']
-    desc_text = weather_info['desc'] # Original Chinese for logic
-    desc_en = weather_info['desc_en'] # English for display
+    desc_text = weather_info['desc']
+    desc_en = weather_info['desc_en']
     
-    # Default Icon & Color
     w_icon = "☁️" 
     w_color = "gray"
     
-    # Logic based on Chinese keywords from API
     if "雷" in desc_text:
         w_icon = "⛈️"
         w_color = "#FF0000"
@@ -235,7 +261,6 @@ if weather_info:
         w_icon = "☁️"
         w_color = "gray"
 
-    # Layout
     c1, c2 = st.sidebar.columns([1, 2])
     with c1:
         st.markdown(f"<div style='font-size: 60px; text-align: center;'>{w_icon}</div>", unsafe_allow_html=True)
@@ -243,7 +268,7 @@ if weather_info:
         st.metric(label="Rainfall (mm)", value=f"{rain_val}")
         st.caption(f"Condition: {desc_en}")
 else:
-    st.sidebar.info("Loading weather data...")
+    st.sidebar.warning(f"Weather Status: {w_err}")
 
 # --- Navigation & Layers ---
 st.sidebar.header("🏁 Navigation & Layers")
@@ -275,7 +300,6 @@ if mode == "🚶 No Umbrella (Find nearest Raingo)" and not df_raingo.empty:
     for idx, row in df_raingo.iterrows():
         site_loc = [row['緯度'], row['經度']]
         dist = geodesic(start_loc, site_loc).meters
-        # Keep Chinese station name in popup or translate if possible
         folium.CircleMarker(site_loc, radius=5, color='green', fill=True, popup=row['租借站名稱']).add_to(m)
         if dist < min_dist:
             min_dist = dist
@@ -297,11 +321,10 @@ if mode == "🚶 No Umbrella (Find nearest Raingo)" and not df_raingo.empty:
             folium.PolyLine([start_loc, dest_coords], color="green").add_to(m)
 
 elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
-    geolocator = Nominatim(user_agent="rainwalk_path_final")
+    geolocator = ArcGIS(timeout=10)
     try:
-        # 限制目的地搜尋也在台灣
-        loc = geolocator.geocode(dest_input, country_codes='tw')
-        
+        query = f"{dest_input} Taiwan"
+        loc = geolocator.geocode(query)
         if loc:
             dest_coords = [loc.latitude, loc.longitude]
             folium.Marker(dest_coords, popup=dest_input, icon=folium.Icon(color='red', icon='flag')).add_to(m)
@@ -309,13 +332,11 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
                 orig_node = ox.distance.nearest_nodes(G, final_lon, final_lat)
                 target_node = ox.distance.nearest_nodes(G, dest_coords[1], dest_coords[0])
                 
-                # Gold: Sheltered Path
                 route = nx.shortest_path(G, orig_node, target_node, weight='rain_cost')
                 path_nodes = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in route]
                 full_path = [start_loc] + path_nodes + [dest_coords]
                 folium.PolyLine(full_path, color='#FFD700', weight=6, opacity=0.9, tooltip="Best Sheltered Route").add_to(m)
                 
-                # Blue: Shortest Path
                 shortest_route = nx.shortest_path(G, orig_node, target_node, weight='length')
                 short_nodes = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in shortest_route]
                 folium.PolyLine([start_loc]+short_nodes+[dest_coords], color='blue', weight=3, dash_array='5', opacity=0.5, tooltip="Shortest Path (Unsheltered)").add_to(m)
@@ -324,7 +345,7 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
             except Exception as e:
                 st.error(f"Path calculation error: {e}")
                 folium.PolyLine([start_loc, dest_coords], color="blue", dash_array='5').add_to(m)
-    except:
-        st.error("Destination not found.")
+    except Exception as e:
+        st.error(f"Destination Search Failed: {e}")
 
 st_folium(m, width=800, height=600)
