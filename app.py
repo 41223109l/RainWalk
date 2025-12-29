@@ -13,6 +13,10 @@ from streamlit_js_eval import get_geolocation
 import urllib3
 import os
 
+ox.settings.user_agent = "RainWalk_Student_Project_NTNU" 
+
+# 建議同時開啟快取，避免重複下載浪費時間
+ox.settings.use_cache = True
 # 關閉不安全的連線警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -366,4 +370,5 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
         st.error(f"Destination Search Failed: {e}")
 
 st_folium(m, width=800, height=600)
+
 
