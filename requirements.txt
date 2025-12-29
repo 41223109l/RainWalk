@@ -9,3 +9,4 @@ osmnx
 networkx
 streamlit-js-eval
 fiona
+scikit-learn
