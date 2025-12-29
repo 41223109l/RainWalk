@@ -286,7 +286,7 @@ st.sidebar.header("🏁 Navigation & Layers")
 
 dest_input = st.sidebar.text_input(
     "Enter Destination", 
-    value="",  # 這裡留空，才能顯示下面的 placeholder
+    value="",  
     placeholder="e.g., 和平東路一段129號"
 )
 
@@ -370,5 +370,6 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
         st.error(f"Destination Search Failed: {e}")
 
 st_folium(m, width=800, height=600)
+
 
 
