@@ -30,7 +30,9 @@ The core logic utilizes a **weighted routing algorithm**. By assigning a higher 
 
 ## 🛠️ Future Work
 - **Refining Network Topology**: Improving road network connectivity to eliminate geometric errors.
+  
 - **Enhanced Search API**: Integrating Google Places or similar APIs to support keyword-based location searching.
+  
 - **Weight Optimization**: Tuning algorithm parameters to better simulate realistic human walking decisions in various rain intensities.
 
 ## Acknowledgments
