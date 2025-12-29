@@ -1,3 +1,4 @@
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://rainwalk-qngbk8fztagh8auyryg6ck.streamlit.app/)
 # ☔ RainWalk
 This is a final project for the Data Science and Computer Programming course at NTNU.
 
