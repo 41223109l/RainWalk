@@ -7,7 +7,7 @@ This is a final project for the Data Science and Computer Programming course at 
 RainWalk Pro is a Geospatial Web application built with **Python** and **Streamlit**. It aims to enhance the walking experience in Taipei—a city known for its frequent rainfall—by integrating real-time meteorological data with urban spatial analysis.
 
 ## 🎬 Project Demonstration
-[![Watch the video](https://img.youtube.com/vi/H1cTaqjRts0/0.jpg)](https://youtu.be/H1cTaqjRts0)
+[![Watch the video](https://img.youtube.com/vi/H1cTaqjRts0/maxresdefault.jpg)](https://youtu.be/H1cTaqjRts0)
 *Click the image above to watch the 1-minute project demonstration.*
 
 ## 🚀 Key Features
