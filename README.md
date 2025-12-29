@@ -37,4 +37,5 @@ The core logic utilizes a **weighted routing algorithm**. By assigning a higher 
 
 ## Acknowledgments
 Special thanks to the **RainGo** team for providing the dataset of umbrella rental stations in Daan District. Their support made the “No Umbrella” navigation feature possible.
+
 *Developed as a Final Project for the DSCP Course at NTNU.*
