@@ -21,10 +21,13 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ==========================================
 st.set_page_config(page_title="RainWalk", page_icon="☔", layout="wide")
 
-try:
+# 嘗試從 Streamlit Secrets 讀取，如果沒有就報錯，強迫自己去設定環境變數，而不是寫死在程式碼裡
+if "CWA_API_KEY" in st.secrets:
     CWA_API_KEY = st.secrets["CWA_API_KEY"]
-except:
-    CWA_API_KEY = "CWA-42942699-8B8B-4B7B-8800-110D1D769E6D"
+else:
+    # 這裡可以改成從環境變數讀取，或者直接報錯提示
+    st.error("找不到 API Key，請設定 Secrets！")
+    st.stop()
 
 API_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001"
 
@@ -363,3 +366,4 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
         st.error(f"Destination Search Failed: {e}")
 
 st_folium(m, width=800, height=600)
+
