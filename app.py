@@ -19,7 +19,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ==========================================
 # 0. 系統設定
 # ==========================================
-st.set_page_config(page_title="RainWalk", page_icon="☔", layout="wide")
+st.set_page_config(page_title="RainWalk Pro", page_icon="☔", layout="wide")
 
 try:
     CWA_API_KEY = st.secrets["CWA_API_KEY"]
@@ -74,7 +74,6 @@ def get_weather_data(user_lat, user_lon):
             
             desc = w_elem.get('Weather', 'Observing')
             
-            # 簡易翻譯
             desc_en = desc
             if "雷" in desc: desc_en = "Thunderstorm"
             elif "雨" in desc: desc_en = "Rainy"
@@ -89,37 +88,28 @@ def get_weather_data(user_lat, user_lon):
 
 @st.cache_data
 def load_map_data():
-    # 1. 讀取 CSV (直接讀檔名，因為檔案就在旁邊)
     raingo = pd.DataFrame()
     try: 
         raingo = pd.read_csv('raingo.csv')
     except: 
-        try:
-            raingo = pd.read_csv('raingo共享傘租借站-大安區-20250613.csv')
+        try: raingo = pd.read_csv('raingo共享傘租借站-大安區-20250613.csv')
         except: pass
     
-    # 2. 讀取 騎樓 Shapefile
     arcade = gpd.GeoDataFrame()
     try:
         shp_path = 'Finishgfl97.shp'
-        
-        # 先試試 big5
         arcade = gpd.read_file(shp_path, encoding='big5')
         if arcade.crs is None: arcade.set_crs(epsg=3826, inplace=True)
         arcade = arcade.to_crs(epsg=4326)
-        
         check = arcade[arcade['GFL_ZONE'] == '大安區']
         
-        # 如果 big5 讀出來是空的，改用 utf-8
         if check.empty:
             arcade = gpd.read_file(shp_path, encoding='utf-8')
             if arcade.crs is None: arcade.set_crs(epsg=3826, inplace=True)
             arcade = arcade.to_crs(epsg=4326)
             check = arcade[arcade['GFL_ZONE'] == '大安區']
             
-        if not check.empty: 
-            arcade = check
-            
+        if not check.empty: arcade = check
     except Exception as e:
         st.sidebar.error(f"Map Load Error: {e}")
     
@@ -165,19 +155,22 @@ def load_road_network_optimized(_gdf_arcade):
         print(f"Network analysis complete: Marked {count} sheltered edges.")
         return G
 
+# --- 經緯度範圍檢查 (Bounding Box) ---
+def check_bounds(lat, lon):
+    # 北北基桃 大致範圍
+    # 緯度: 24.5 (苗栗/新竹交界) ~ 25.4 (北海岸)
+    # 經度: 120.8 (桃園西側) ~ 122.1 (基隆東側)
+    if 24.5 <= lat <= 25.4 and 120.8 <= lon <= 122.1:
+        return True
+    return False
+
 # ==========================================
 # 2. 介面與邏輯
 # ==========================================
 
-st.title("☔ RainWalk: Smart Shelter Navigation")
+st.title("☔ RainWalk Pro: Smart Shelter Navigation")
 
 df_raingo, gdf_arcade = load_map_data()
-
-# 恢復正常的錯誤顯示，如果真的沒讀到才跳出來
-if df_raingo.empty:
-    st.sidebar.warning("⚠️ RainGo data missing (Check CSV in root folder)")
-if gdf_arcade.empty:
-    st.sidebar.warning("⚠️ Arcade data missing (Check Shapefile in root folder)")
 
 try:
     G = load_road_network_optimized(gdf_arcade)
@@ -207,17 +200,24 @@ if use_gps:
 
 # Address Input
 if not use_gps:
-    start_address = st.sidebar.text_input("Enter Departure Address (e.g., 捷運古亭站)", "")
+    start_address = st.sidebar.text_input("Enter Departure Address (e.g., 台北 帥哥鹹酥雞)", "")
     if st.sidebar.button("🔍 Search Coordinates"):
         geolocator = ArcGIS(timeout=10) 
         try:
             query = f"{start_address} Taiwan"
             location = geolocator.geocode(query)
+            
             if location:
-                st.session_state.lat = location.latitude
-                st.session_state.lon = location.longitude
-                st.sidebar.success(f"Found: {location.address}")
-                st.rerun()
+                # 【改進功能】使用經緯度檢查是否在北北基桃
+                if check_bounds(location.latitude, location.longitude):
+                    st.session_state.lat = location.latitude
+                    st.session_state.lon = location.longitude
+                    st.sidebar.success(f"Found: {location.address}")
+                    st.rerun()
+                else:
+                    # 抓到外縣市的結果，顯示警告並建議使用者加上縣市
+                    st.sidebar.error(f"⚠️ Found location in '{location.address}', but it is too far (outside Taipei Area).")
+                    st.sidebar.info(f"💡 Tip: Please add 'Taipei' or 'New Taipei' to your search (e.g., 'Taipei {start_address}').")
             else:
                 st.sidebar.error("Address not found.")
         except Exception as e: 
@@ -326,28 +326,31 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
         query = f"{dest_input} Taiwan"
         loc = geolocator.geocode(query)
         if loc:
-            dest_coords = [loc.latitude, loc.longitude]
-            folium.Marker(dest_coords, popup=dest_input, icon=folium.Icon(color='red', icon='flag')).add_to(m)
-            try:
-                orig_node = ox.distance.nearest_nodes(G, final_lon, final_lat)
-                target_node = ox.distance.nearest_nodes(G, dest_coords[1], dest_coords[0])
-                
-                route = nx.shortest_path(G, orig_node, target_node, weight='rain_cost')
-                path_nodes = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in route]
-                full_path = [start_loc] + path_nodes + [dest_coords]
-                folium.PolyLine(full_path, color='#FFD700', weight=6, opacity=0.9, tooltip="Best Sheltered Route").add_to(m)
-                
-                shortest_route = nx.shortest_path(G, orig_node, target_node, weight='length')
-                short_nodes = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in shortest_route]
-                folium.PolyLine([start_loc]+short_nodes+[dest_coords], color='blue', weight=3, dash_array='5', opacity=0.5, tooltip="Shortest Path (Unsheltered)").add_to(m)
-                
-                st.success("✨ Route planning complete! Gold line indicates the best sheltered path.")
-            except Exception as e:
-                st.error(f"Path calculation error: {e}")
-                folium.PolyLine([start_loc, dest_coords], color="blue", dash_array='5').add_to(m)
+            # 同樣加上邊界檢查
+            if check_bounds(loc.latitude, loc.longitude):
+                dest_coords = [loc.latitude, loc.longitude]
+                folium.Marker(dest_coords, popup=dest_input, icon=folium.Icon(color='red', icon='flag')).add_to(m)
+                try:
+                    orig_node = ox.distance.nearest_nodes(G, final_lon, final_lat)
+                    target_node = ox.distance.nearest_nodes(G, dest_coords[1], dest_coords[0])
+                    
+                    route = nx.shortest_path(G, orig_node, target_node, weight='rain_cost')
+                    path_nodes = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in route]
+                    full_path = [start_loc] + path_nodes + [dest_coords]
+                    folium.PolyLine(full_path, color='#FFD700', weight=6, opacity=0.9, tooltip="Best Sheltered Route").add_to(m)
+                    
+                    shortest_route = nx.shortest_path(G, orig_node, target_node, weight='length')
+                    short_nodes = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in shortest_route]
+                    folium.PolyLine([start_loc]+short_nodes+[dest_coords], color='blue', weight=3, dash_array='5', opacity=0.5, tooltip="Shortest Path (Unsheltered)").add_to(m)
+                    
+                    st.success("✨ Route planning complete! Gold line indicates the best sheltered path.")
+                except Exception as e:
+                    st.error(f"Path calculation error: {e}")
+                    folium.PolyLine([start_loc, dest_coords], color="blue", dash_array='5').add_to(m)
+            else:
+                 st.error(f"⚠️ Destination '{loc.address}' is outside the supported area (North Taiwan only).")
+                 st.info(f"💡 Tip: Try adding 'Taipei' to your search (e.g., 'Taipei {dest_input}').")
     except Exception as e:
         st.error(f"Destination Search Failed: {e}")
 
 st_folium(m, width=800, height=600)
-
-
