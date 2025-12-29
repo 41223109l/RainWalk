@@ -12,10 +12,13 @@ RainWalk is a Geospatial Web application built with **Python** and **Streamlit**
 
 ## 🚀 Key Features
 - **Real-time Weather Integration**: Fetches live data via the **Central Weather Administration (CWA) API**. The UI features dynamic weather icons and displays current rainfall and humidity levels based on the user's vicinity.
+  
 - **Real-time GPS Positioning**: Automatically detects the user's current coordinates to set as the starting point for navigation, providing a seamless "locate-and-go" experience.
+  
 - **Dual Routing Modes**:
   - **No Umbrella Mode**: Locates and navigates to the nearest **Raingo** shared-umbrella station using geodesic distance.
   - **Smart Shelter Mode**: An experimental routing system that prioritizes Taipei’s unique **arcade (騎樓) network** to help pedestrians stay dry.
+    
 - **Geographic Safety Guard**: Implements a **bounding box** constraint for Northern Taiwan (Taipei/New Taipei City). The system provides an automated warning if a user searches outside the supported service area to ensure data reliability.
 
 ## ⚙️ Technical Reflection & Algorithms
