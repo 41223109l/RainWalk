@@ -21,7 +21,7 @@ RainWalk Pro is a Geospatial Web application built with **Python** and **Streaml
 The core logic utilizes a **weighted routing algorithm**. By assigning a higher "cost" to unsheltered road segments, the system attempts to calculate paths that maximize arcade coverage. 
 
 **Current Limitations:**
-- Network Topology: Due to map resolution and node-snapping limitations, some paths may occasionally clip through buildings or result in suboptimal detours.
+- **Network Topology**: Due to map resolution and node-snapping limitations, some paths may occasionally clip through buildings or result in suboptimal detours.
 - **Search Scope**: The current geocoding service is optimized for exact address inputs rather than general place names.
 
 ## 🛠️ Future Work
@@ -30,6 +30,5 @@ The core logic utilizes a **weighted routing algorithm**. By assigning a higher 
 - **Weight Optimization**: Tuning algorithm parameters to better simulate realistic human walking decisions in various rain intensities.
 
 ## Acknowledgments
-Special thanks to the **RainGo** team for providing the dataset of umbrella rental stations in Daan District. Their support made the "No Umbrella" navigation feature possible.
----
+- Special thanks to the **RainGo** team for providing the dataset of umbrella rental stations in Daan District. Their support made the “No Umbrella” navigation feature possible.
 *Developed as a Final Project for the DSCP Course at NTNU.*
