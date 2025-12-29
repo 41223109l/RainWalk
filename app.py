@@ -19,7 +19,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ==========================================
 # 0. 系統設定
 # ==========================================
-st.set_page_config(page_title="RainWalk Pro", page_icon="☔", layout="wide")
+st.set_page_config(page_title="RainWalk", page_icon="☔", layout="wide")
 
 try:
     CWA_API_KEY = st.secrets["CWA_API_KEY"]
@@ -118,17 +118,7 @@ def load_map_data():
 @st.cache_resource
 def load_road_network_optimized(_gdf_arcade): 
     with st.spinner('Analyzing road network data (GIS processing)...'):
-        # 1. 下載路網
         G = ox.graph_from_place("Daan District, Taipei, Taiwan", network_type='walk')
-        
-        # ==========================================
-        # 【修正處】使用 OSMnx 2.0 新版指令
-        # 舊版寫法: ox.utils_graph.get_largest_component (已失效)
-        # 新版寫法: ox.truncate.largest_component
-        G = ox.truncate.largest_component(G, strongly=True)
-        # ==========================================
-        
-        # 2. 空間疊圖 (GIS)
         gdf_edges = ox.graph_to_gdfs(G, nodes=False, fill_edge_geometry=True)
         gdf_edges_proj = gdf_edges.to_crs(epsg=3826)
         
@@ -164,6 +154,7 @@ def load_road_network_optimized(_gdf_arcade):
         
         print(f"Network analysis complete: Marked {count} sheltered edges.")
         return G
+
 # --- 經緯度範圍檢查 (Bounding Box) ---
 def check_bounds(lat, lon):
     # 北北基桃 大致範圍
@@ -177,7 +168,7 @@ def check_bounds(lat, lon):
 # 2. 介面與邏輯
 # ==========================================
 
-st.title("☔ RainWalk Pro: Smart Shelter Navigation")
+st.title("☔ RainWalk: Smart Shelter Navigation")
 
 df_raingo, gdf_arcade = load_map_data()
 
@@ -209,7 +200,11 @@ if use_gps:
 
 # Address Input
 if not use_gps:
-    start_address = st.sidebar.text_input("Enter Departure Address (e.g., 台北 帥哥鹹酥雞)", "")
+    start_address = st.sidebar.text_input(
+    "Enter Departure Address", 
+    value="", 
+    placeholder="e.g., 師大路39巷14號 (Please use Address, not Shop Name)"
+)
     if st.sidebar.button("🔍 Search Coordinates"):
         geolocator = ArcGIS(timeout=10) 
         try:
@@ -217,7 +212,7 @@ if not use_gps:
             location = geolocator.geocode(query)
             
             if location:
-                # 【改進功能】使用經緯度檢查是否在北北基桃
+                # 使用經緯度檢查是否在北北基桃
                 if check_bounds(location.latitude, location.longitude):
                     st.session_state.lat = location.latitude
                     st.session_state.lon = location.longitude
@@ -281,7 +276,12 @@ else:
 
 # --- Navigation & Layers ---
 st.sidebar.header("🏁 Navigation & Layers")
-dest_input = st.sidebar.text_input("Enter Destination", "National Taiwan Normal University Library")
+
+dest_input = st.sidebar.text_input(
+    "Enter Destination", 
+    value="",  # 這裡留空，才能顯示下面的 placeholder
+    placeholder="e.g., 和平東路一段129號"
+)
 
 mode = st.sidebar.radio("Navigation Mode", 
                         ["🚶 No Umbrella (Find nearest Raingo)", 
