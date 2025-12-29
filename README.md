@@ -14,7 +14,7 @@ To help pedestrians find sheltered walking routes (arcades) in Daan, Taipei on r
 ## Limitations
 - The routing algorithm currently prioritizes sheltered roads but may not always find the perfect connection due to OSM data limitations.
 
-[🎬 Click here to watch the RainWalk Pro Demo Video](https://github.com/41223109l/RainWalk/releases/download/v1.0.0/InShot_20251229_225446726.mp4)
+[🎬 Click here to watch the RainWalk Demo Video](https://github.com/41223109l/RainWalk/releases/download/v1.0.0/InShot_20251229_225446726.mp4)
 
 ## Acknowledgments
 Special thanks to the **RainGo** team for providing the dataset of umbrella rental stations in Daan District. Their support made the "No Umbrella" navigation feature possible.
