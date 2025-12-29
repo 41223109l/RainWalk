@@ -25,11 +25,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ==========================================
 st.set_page_config(page_title="RainWalk", page_icon="☔", layout="wide")
 
-# 嘗試從 Streamlit Secrets 讀取，如果沒有就報錯，強迫自己去設定環境變數，而不是寫死在程式碼裡
+# 嘗試從 Streamlit Secrets 讀取，如果沒有就報錯，強迫自己去設定環境變數
 if "CWA_API_KEY" in st.secrets:
     CWA_API_KEY = st.secrets["CWA_API_KEY"]
 else:
-    # 這裡可以改成從環境變數讀取，或者直接報錯提示
+    # 從環境變數讀取，或者直接報錯提示
     st.error("找不到 API Key，請設定 Secrets！")
     st.stop()
 
@@ -370,6 +370,7 @@ elif mode == "☂️ Smart Shelter Navigation (Arcades)" and dest_input:
         st.error(f"Destination Search Failed: {e}")
 
 st_folium(m, width=800, height=600)
+
 
 
 
