@@ -118,7 +118,17 @@ def load_map_data():
 @st.cache_resource
 def load_road_network_optimized(_gdf_arcade): 
     with st.spinner('Analyzing road network data (GIS processing)...'):
+        # 1. 下載路網
         G = ox.graph_from_place("Daan District, Taipei, Taiwan", network_type='walk')
+        
+        # ==========================================
+        # 【修正處】使用 OSMnx 2.0 新版指令
+        # 舊版寫法: ox.utils_graph.get_largest_component (已失效)
+        # 新版寫法: ox.truncate.largest_component
+        G = ox.truncate.largest_component(G, strongly=True)
+        # ==========================================
+        
+        # 2. 空間疊圖 (GIS)
         gdf_edges = ox.graph_to_gdfs(G, nodes=False, fill_edge_geometry=True)
         gdf_edges_proj = gdf_edges.to_crs(epsg=3826)
         
@@ -154,7 +164,6 @@ def load_road_network_optimized(_gdf_arcade):
         
         print(f"Network analysis complete: Marked {count} sheltered edges.")
         return G
-
 # --- 經緯度範圍檢查 (Bounding Box) ---
 def check_bounds(lat, lon):
     # 北北基桃 大致範圍
