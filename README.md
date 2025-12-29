@@ -30,5 +30,5 @@ The core logic utilizes a **weighted routing algorithm**. By assigning a higher 
 - **Weight Optimization**: Tuning algorithm parameters to better simulate realistic human walking decisions in various rain intensities.
 
 ## Acknowledgments
-- Special thanks to the **RainGo** team for providing the dataset of umbrella rental stations in Daan District. Their support made the “No Umbrella” navigation feature possible.
+Special thanks to the **RainGo** team for providing the dataset of umbrella rental stations in Daan District. Their support made the “No Umbrella” navigation feature possible.
 *Developed as a Final Project for the DSCP Course at NTNU.*
